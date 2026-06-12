@@ -25,12 +25,23 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
+  const allowedEmails = (process.env.ALLOWED_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean)
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/dashboard")
+  const isAuthLogin = request.nextUrl.pathname === "/auth/login"
   const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/callback")
+
+  if (user && allowedEmails.length > 0 && !allowedEmails.includes(user.email ?? "")) {
+    await supabase.auth.signOut()
+    const url = request.nextUrl.clone()
+    url.pathname = "/auth/login"
+    url.searchParams.set("error", "not_authorized")
+    return NextResponse.redirect(url)
+  }
 
   if (!user && isAuthRoute && !isAuthCallback) {
     const url = request.nextUrl.clone()
@@ -38,7 +49,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && request.nextUrl.pathname === "/auth/login") {
+  if (user && isAuthLogin) {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     return NextResponse.redirect(url)
