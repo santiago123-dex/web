@@ -1,5 +1,5 @@
 -- ============================================
--- Vitrina — Database Schema
+-- Vitrina — Database Schema (v2)
 -- ============================================
 
 -- 1. PROFILES (extends Supabase auth.users)
@@ -10,8 +10,12 @@ create table if not exists public.profiles (
   telefono text,
   whatsapp text,
   instagram text,
+  website text,
+  horarios text,
   color_primario text default '#8b5cf6',
+  color_secundario text default '#f0f0ff',
   logo_url text,
+  cover_url text,
   subdominio text unique,
   created_at timestamptz default now()
 );
@@ -38,6 +42,7 @@ create table if not exists public.catalogos (
   descripcion text,
   slug text unique not null,
   activo boolean default true,
+  visitas integer default 0,
   created_at timestamptz default now()
 );
 
@@ -47,27 +52,50 @@ create policy "Anyone can view active catalogos"
   on catalogos for select
   using (activo = true);
 
-create policy "Users can insert own catalogos"
-  on catalogos for insert
-  with check (auth.uid() = user_id);
-
-create policy "Users can update own catalogos"
-  on catalogos for update
+create policy "Catalog owners can manage catalogos"
+  on catalogos for all
   using (auth.uid() = user_id);
 
-create policy "Users can delete own catalogos"
-  on catalogos for delete
-  using (auth.uid() = user_id);
-
--- 3. PRODUCTOS
-create table if not exists public.productos (
+-- 3. CATEGORIAS
+create table if not exists public.categorias (
   id uuid default gen_random_uuid() primary key,
   catalogo_id uuid references public.catalogos(id) on delete cascade not null,
   nombre text not null,
   descripcion text,
+  icono text default '📦',
+  orden integer default 0,
+  created_at timestamptz default now()
+);
+
+alter table public.categorias enable row level security;
+
+create policy "Anyone can view categorias"
+  on categorias for select
+  using (true);
+
+create policy "Catalog owners can manage categorias"
+  on categorias for all
+  using (
+    exists (
+      select 1 from catalogos
+      where catalogos.id = categorias.catalogo_id
+      and catalogos.user_id = auth.uid()
+    )
+  );
+
+-- 4. PRODUCTOS
+create table if not exists public.productos (
+  id uuid default gen_random_uuid() primary key,
+  catalogo_id uuid references public.catalogos(id) on delete cascade not null,
+  categoria_id uuid references public.categorias(id) on delete set null,
+  nombre text not null,
+  descripcion text,
   precio numeric(10,2) not null,
   imagen_url text,
+  badge text check (badge in ('nuevo', 'oferta', 'agotado', null)),
+  destacado boolean default false,
   disponible boolean default true,
+  clicks integer default 0,
   orden integer default 0,
   created_at timestamptz default now()
 );
@@ -88,7 +116,30 @@ create policy "Catalog owners can manage productos"
     )
   );
 
--- 4. AUTO-CREATE PROFILE ON SIGNUP
+-- 5. TRACKING DE VISITAS
+create table if not exists public.visitas (
+  id uuid default gen_random_uuid() primary key,
+  catalogo_id uuid references public.catalogos(id) on delete cascade not null,
+  created_at timestamptz default now()
+);
+
+alter table public.visitas enable row level security;
+
+create policy "Anyone can insert visitas"
+  on visitas for insert
+  with check (true);
+
+create policy "Catalog owners can view visitas"
+  on visitas for select
+  using (
+    exists (
+      select 1 from catalogos
+      where catalogos.id = visitas.catalogo_id
+      and catalogos.user_id = auth.uid()
+    )
+  );
+
+-- 6. AUTO-CREATE PROFILE ON SIGNUP
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -106,7 +157,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- 5. STORAGE BUCKET
+-- 7. STORAGE BUCKET
 insert into storage.buckets (id, name, public)
 values ('productos', 'productos', true)
 on conflict (id) do nothing;
