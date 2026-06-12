@@ -2,10 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Store, ShieldAlert } from "lucide-react"
+import { Store } from "lucide-react"
 
-export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await props.searchParams
+export default async function LoginPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -45,18 +44,6 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
             No necesitas tarjeta de crédito
           </p>
         </div>
-
-        {error === "not_authorized" && (
-          <div className="w-full flex items-start gap-3 p-4 rounded-lg border border-red-200 bg-red-50 text-sm text-red-800">
-            <ShieldAlert className="size-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Acceso restringido</p>
-              <p className="text-red-600">
-                Tu correo no está autorizado para acceder a esta aplicación.
-              </p>
-            </div>
-          </div>
-        )}
 
         <form action={signIn} className="w-full">
           <Button className="w-full" size="lg">
